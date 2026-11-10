@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Mac Live Audio Stream</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: rgba(22, 27, 34, 0.85);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #2ea043;
+      --primary-glow: rgba(46, 160, 67, 0.4);
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --warning: #d29922;
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+      --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(88, 166, 255, 0.12), transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(46, 160, 67, 0.08), transparent 30%);
+      color: var(--text);
+      font-family: var(--font-family);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 1.5rem 1rem env(safe-area-inset-bottom, 1.5rem);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      padding-top: 0.5rem;
+    }
+
+    .device-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+    }
+
+    p.subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 1.25rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Status Bar */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--card-border);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s;
+    }
+
+    .dot.connected {
+      background: #3fb950;
+      box-shadow: 0 0 8px #3fb950;
+    }
+
+    .dot.connecting {
+      background: var(--warning);
+      box-shadow: 0 0 8px var(--warning);
+    }
+
+    .dot.disconnected {
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    .latency-badge {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* Big Action Button */
+    .action-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      margin: 0.5rem 0;
+    }
+
+    .btn-main {
+      width: 100%;
+      height: 90px;
+      border: none;
+      outline: none;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+      color: white;
+      font-size: 1.25rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      box-shadow: 0 10px 28px var(--primary-glow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      touch-action: manipulation;
+    }
+
+    .btn-main:active {
+      transform: scale(0.97);
+      filter: brightness(0.95);
+    }
+
+    .btn-main.streaming {
+      background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+      box-shadow: 0 10px 28px rgba(56, 139, 253, 0.4);
+      animation: pulse-aura 2.5s infinite;
+    }
+
+    .btn-main.paused {
+      background: linear-gradient(135deg, #30363d 0%, #21262d 100%);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      color: var(--text-muted);
+    }
+
+    @keyframes pulse-aura {
+      0% { box-shadow: 0 0 0 0 rgba(56, 139, 253, 0.6); }
+      70% { box-shadow: 0 0 0 16px rgba(56, 139, 253, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(56, 139, 253, 0); }
+    }
+
+    /* Visualizer & VU Meter Canvas */
+    .visualizer-wrapper {
+      position: relative;
+      width: 100%;
+      height: 90px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .visualizer-overlay {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: rgba(255, 255, 255, 0.4);
+      pointer-events: none;
+    }
+
+    /* Volume Slider */
+    .volume-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .volume-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+
+    .volume-label {
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .volume-value {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-icon {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-icon:active {
+      transform: scale(0.95);
+    }
+
+    input[type=range] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      border: 2px solid white;
+    }
+
+    /* Tabs & Modes */
+    .tabs {
+      display: flex;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 3px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 0.5rem 0.25rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .mode-content {
+      display: none;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .mode-content.active {
+      display: block;
+    }
+
+    /* Secondary Controls */
+    .btn-secondary {
+      width: 100%;
+      padding: 0.65rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    /* Auth Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 100;
+    }
+
+    .modal {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+
+    .modal h3 {
+      font-size: 1.15rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 1rem;
+      margin: 1rem 0;
+      outline: none;
+    }
+
+    .modal input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Notice box */
+    .notice {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.4;
+      padding: 0 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="device-badge">
+        <span></span> macOS System Audio • BlackHole 2ch
+      </div>
+      <h1>Mac Live Audio</h1>
+      <p class="subtitle">Real-time stereo stream over local Wi-Fi</p>
+    </header>
+
+    <!-- Main Audio Card -->
+    <div class="card">
+      <div class="status-bar">
+        <div class="status-pill">
+          <span class="dot disconnected" id="statusDot"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+        <div class="latency-badge" id="latencyBadge">Buffer: -- ms</div>
+      </div>
+
+      <div class="action-container">
+        <button class="btn-main" id="listenBtn">
+          <span id="btnIcon">🔊</span>
+          <span id="btnText">Tap to Listen</span>
+        </button>
+      </div>
+
+      <!-- Realtime Visualizer Canvas -->
+      <div class="visualizer-wrapper">
+        <canvas id="visualizerCanvas"></canvas>
+        <div class="visualizer-overlay">
+          <span>L</span>
+          <span id="peakLevelDb">-- dB</span>
+          <span>R</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Volume & Audio Controls -->
+    <div class="card volume-box">
+      <div class="volume-header">
+        <span class="volume-label">Receiver Volume</span>
+        <span class="volume-value" id="volumeDisplay">100%</span>
+      </div>
+      <div class="slider-row">
+        <button class="btn-icon" id="muteBtn" title="Mute/Unmute">🔊</button>
+        <input type="range" id="volumeSlider" min="0" max="150" value="100" step="1">
+        <button class="btn-icon" id="resetVolBtn" title="Reset to 100%">1x</button>
+      </div>
+    </div>
+
+    <!-- Streaming Modes & Fallback -->
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" id="tabWs">⚡ Ultra-Low Latency (WS)</button>
+        <button class="tab-btn" id="tabHttp">📻 Fallback Player (&lt;audio&gt;)</button>
+      </div>
+
+      <div class="mode-content active" id="contentWs">
+        Streams uncompressed 48 kHz 16-bit PCM over WebSocket directly into Web Audio API. Latency: <strong>&lt; 150 ms</strong>. Best for watching videos & gaming on Mac.
+      </div>
+
+      <div class="mode-content" id="contentHttp">
+        <p style="margin-bottom: 0.75rem;">Standard HTTP chunked stream played in native browser &lt;audio&gt; tag. Buffering adds ~2-4s latency, but plays reliably in iOS background / lock-screen.</p>
+        <audio id="nativeAudio" controls preload="none" style="width: 100%; border-radius: 8px;"></audio>
+      </div>
+    </div>
+
+    <!-- Secondary Actions -->
+    <button class="btn-secondary" id="reconnectBtn">🔄 Reconnect Stream</button>
+
+    <div class="notice">
+      💡 <strong>Tip for iOS Safari:</strong> Keep this tab active for ultra-low latency WebSocket audio. BlackHole outputs at 100% unity gain; control your listening volume using the slider above.
+    </div>
+  </div>
+
+  <!-- Password / Token Prompt Modal -->
+  <div class="modal-overlay" id="authModal">
+    <div class="modal">
+      <h3>Authentication Required</h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted);">Enter the stream password or token configured on your Mac:</p>
+      <input type="password" id="tokenInput" placeholder="Password or Access Token" autofocus>
+      <button class="btn-main" id="submitAuthBtn" style="height: 48px; font-size: 1rem;">Unlock Stream</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // Configuration & State
+      const SAMPLE_RATE = 48000;
+      const CHANNELS = 2;
+      const TARGET_JITTER_BUFFER = 0.080; // 80 ms jitter buffer
+      const MAX_DESYNC_LATENCY = 0.250;   // 250 ms max drift threshold
+
+      let audioCtx = null;
+      let gainNode = null;
+      let analyserNode = null;
+      let nextScheduleTime = 0;
+      let ws = null;
+      let isStreaming = false;
+      let isMuted = false;
+      let currentGain = 1.0;
+      let reconnectTimer = null;
+      let animFrameId = null;
+
+      // Extract Token from URL or localStorage
+      const urlParams = new URLSearchParams(window.location.search);
+      let authToken = urlParams.get('token') || localStorage.getItem('mac_stream_token') || '';
+
+      // UI Elements
+      const listenBtn = document.getElementById('listenBtn');
+      const btnIcon = document.getElementById('btnIcon');
+      const btnText = document.getElementById('btnText');
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      const latencyBadge = document.getElementById('latencyBadge');
+      const volumeSlider = document.getElementById('volumeSlider');
+      const volumeDisplay = document.getElementById('volumeDisplay');
+      const muteBtn = document.getElementById('muteBtn');
+      const resetVolBtn = document.getElementById('resetVolBtn');
+      const reconnectBtn = document.getElementById('reconnectBtn');
+      const visualizerCanvas = document.getElementById('visualizerCanvas');
+      const peakLevelDb = document.getElementById('peakLevelDb');
+      const authModal = document.getElementById('authModal');
+      const tokenInput = document.getElementById('tokenInput');
+      const submitAuthBtn = document.getElementById('submitAuthBtn');
+      const tabWs = document.getElementById('tabWs');
+      const tabHttp = document.getElementById('tabHttp');
+      const contentWs = document.getElementById('contentWs');
+      const contentHttp = document.getElementById('contentHttp');
+      const nativeAudio = document.getElementById('nativeAudio');
+
+      // Initialize Canvas
+      const canvasCtx = visualizerCanvas.getContext('2d');
+      function resizeCanvas() {
+        const rect = visualizerCanvas.getBoundingClientRect();
+        visualizerCanvas.width = rect.width * (window.devicePixelRatio || 1);
+        visualizerCanvas.height = rect.height * (window.devicePixelRatio || 1);
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // Setup HTTP Fallback URL
+      function updateFallbackSrc() {
+        const streamUrl = (window.location.protocol === 'https:' ? 'https:' : 'http:') +
+          '//' + window.location.host + '/stream.mp3' + (authToken ? ('?token=' + encodeURIComponent(authToken)) : '');
+        nativeAudio.src = streamUrl;
+      }
+      updateFallbackSrc();
+
+      // Tab Switching
+      tabWs.addEventListener('click', () => {
+        tabWs.classList.add('active');
+        tabHttp.classList.remove('active');
+        contentWs.classList.add('active');
+        contentHttp.classList.remove('active');
+        nativeAudio.pause();
+      });
+
+      tabHttp.addEventListener('click', () => {
+        tabHttp.classList.add('active');
+        tabWs.classList.remove('active');
+        contentHttp.classList.add('active');
+        contentWs.classList.remove('active');
+        // Stop WebSocket audio when using fallback
+        if (isStreaming) stopWebSocketAudio();
+      });
+
+      // Unlock AudioContext (Must be user-gesture triggered for iOS Safari)
+      async function getAudioContext() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass({
+            sampleRate: SAMPLE_RATE,
+            latencyHint: 'interactive'
+          });
+
+          // Master Gain Node
+          gainNode = audioCtx.createGain();
+          gainNode.gain.setValueAtTime(currentGain, audioCtx.currentTime);
+
+          // Fast Analyser Node for Visualizer
+          analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = 256;
+          analyserNode.smoothingTimeConstant = 0.5;
+
+          gainNode.connect(analyserNode);
+          analyserNode.connect(audioCtx.destination);
+
+          // Monitor state transitions
+          audioCtx.onstatechange = () => {
+            if (audioCtx.state === 'suspended' && isStreaming) {
+              setUIState('paused');
+            } else if (audioCtx.state === 'running' && isStreaming) {
+              setUIState('streaming');
+            }
+          };
+        }
+
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+
+        return audioCtx;
+      }
+
+      // UI State Helper
+      function setUIState(state) {
+        listenBtn.classList.remove('streaming', 'paused');
+        statusDot.className = 'dot';
+
+        if (state === 'streaming') {
+          listenBtn.classList.add('streaming');
+          btnIcon.textContent = '🔊';
+          btnText.textContent = 'Streaming Live';
+          statusDot.classList.add('connected');
+          statusText.textContent = 'Connected (48kHz Stereo)';
+          latencyBadge.textContent = 'Buffer: ~80ms';
+        } else if (state === 'paused') {
+          listenBtn.classList.add('paused');
+          btnIcon.textContent = '⏸️';
+          btnText.textContent = 'Tap to Resume Audio';
+          statusDot.classList.add('connecting');
+          statusText.textContent = 'Audio Suspended by iOS';
+        } else if (state === 'connecting') {
+          btnIcon.textContent = '⏳';
+          btnText.textContent = 'Connecting...';
+          statusDot.classList.add('connecting');
+          statusText.textContent = 'Connecting to Mac...';
+        } else {
+          // Disconnected
+          btnIcon.textContent = '▶️';
+          btnText.textContent = 'Tap to Listen';
+          statusDot.classList.add('disconnected');
+          statusText.textContent = 'Disconnected';
+          latencyBadge.textContent = 'Buffer: -- ms';
+        }
+      }
+
+      // WebSocket Connection
+      function connectWebSocket() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
+
+        clearTimeout(reconnectTimer);
+        setUIState('connecting');
+
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let wsUrl = proto + '//' + window.location.host + '/ws';
+        if (authToken) {
+          wsUrl += '?token=' + encodeURIComponent(authToken);
+        }
+
+        try {
+          ws = new WebSocket(wsUrl);
+          ws.binaryType = 'arraybuffer';
+        } catch (err) {
+          console.error('WebSocket init error:', err);
+          handleDisconnect();
+          return;
+        }
+
+        ws.onopen = () => {
+          console.log('Connected to Mac Audio Stream');
+          setUIState('streaming');
+          nextScheduleTime = 0;
+          startVisualizerLoop();
+        };
+
+        ws.onmessage = (event) => {
+          if (!isStreaming || !audioCtx || audioCtx.state !== 'running') return;
+          if (event.data instanceof ArrayBuffer) {
+            queuePcmChunk(event.data);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.warn('WebSocket encountered error:', err);
+        };
+
+        ws.onclose = (event) => {
+          console.log('WebSocket closed with code:', event.code);
+          if (event.code === 4001) {
+            // Authentication failed
+            showAuthModal();
+            setUIState('disconnected');
+          } else {
+            handleDisconnect();
+          }
+        };
+      }
+
+      function handleDisconnect() {
+        setUIState('disconnected');
+        if (isStreaming) {
+          statusText.textContent = 'Reconnecting in 2s...';
+          reconnectTimer = setTimeout(() => {
+            if (isStreaming) connectWebSocket();
+          }, 2000);
+        }
+      }
+
+      function stopWebSocketAudio() {
+        isStreaming = false;
+        clearTimeout(reconnectTimer);
+        if (ws) {
+          ws.onclose = null;
+          ws.close();
+          ws = null;
+        }
+        setUIState('disconnected');
+        if (animFrameId) {
+          cancelAnimationFrame(animFrameId);
+          animFrameId = null;
+        }
+        clearCanvas();
+      }
+
+      // Process PCM audio packets with adaptive jitter buffer
+      function queuePcmChunk(arrayBuffer) {
+        // Interleaved 16-bit signed PCM [L0, R0, L1, R1, ...]
+        const int16 = new Int16Array(arrayBuffer);
+        const frames = int16.length / CHANNELS;
+        if (frames <= 0) return;
+
+        const audioBuffer = audioCtx.createBuffer(CHANNELS, frames, SAMPLE_RATE);
+        const left = audioBuffer.getChannelData(0);
+        const right = audioBuffer.getChannelData(1);
+
+        for (let i = 0, j = 0; i < frames; i++) {
+          left[i] = int16[j++] / 32768.0;
+          right[i] = int16[j++] / 32768.0;
+        }
+
+        const now = audioCtx.currentTime;
+
+        // Jitter buffer synchronization & drift catchup
+        if (nextScheduleTime < now) {
+          // Buffer underrun or initial packet: set target buffer offset
+          nextScheduleTime = now + TARGET_JITTER_BUFFER;
+        } else if (nextScheduleTime > now + MAX_DESYNC_LATENCY) {
+          // Network lag or page backgrounded: skip forward to stay real-time!
+          nextScheduleTime = now + TARGET_JITTER_BUFFER;
+        }
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(gainNode);
+        source.start(nextScheduleTime);
+
+        nextScheduleTime += audioBuffer.duration;
+      }
+
+      // Visualizer Canvas Drawing
+      function clearCanvas() {
+        const w = visualizerCanvas.width;
+        const h = visualizerCanvas.height;
+        canvasCtx.fillStyle = '#0a0d13';
+        canvasCtx.fillRect(0, 0, w, h);
+        peakLevelDb.textContent = '-- dB';
+      }
+
+      function startVisualizerLoop() {
+        if (animFrameId) return;
+
+        const freqData = new Uint8Array(analyserNode.frequencyBinCount);
+        const timeData = new Uint8Array(analyserNode.fftSize);
+
+        function render() {
+          animFrameId = requestAnimationFrame(render);
+          if (!analyserNode || !isStreaming) return;
+
+          analyserNode.getByteFrequencyData(freqData);
+          analyserNode.getByteTimeDomainData(timeData);
+
+          const w = visualizerCanvas.width;
+          const h = visualizerCanvas.height;
+          canvasCtx.fillStyle = 'rgba(10, 13, 19, 0.4)';
+          canvasCtx.fillRect(0, 0, w, h);
+
+          // Calculate peak RMS in dB
+          let sumSquares = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const val = (timeData[i] - 128) / 128.0;
+            sumSquares += val * val;
+          }
+          const rms = Math.sqrt(sumSquares / timeData.length);
+          const db = rms > 0.0001 ? (20 * Math.log10(rms)) : -60.0;
+          peakLevelDb.textContent = (db > -55 ? db.toFixed(1) : '-∞') + ' dB';
+
+          // Oscilloscope Waveform Line
+          canvasCtx.lineWidth = 2 * (window.devicePixelRatio || 1);
+          canvasCtx.strokeStyle = db > -0.5 ? '#f85149' : '#388bfd';
+          canvasCtx.beginPath();
+
+          const sliceWidth = w / timeData.length;
+          let x = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const v = timeData[i] / 128.0;
+            const y = (v * h) / 2;
+            if (i === 0) canvasCtx.moveTo(x, y);
+            else canvasCtx.lineTo(x, y);
+            x += sliceWidth;
+          }
+          canvasCtx.lineTo(w, h / 2);
+          canvasCtx.stroke();
+        }
+        render();
+      }
+
+      // Event Listeners: Main Button
+      listenBtn.addEventListener('click', async () => {
+        try {
+          await getAudioContext();
+          if (!isStreaming) {
+            isStreaming = true;
+            connectWebSocket();
+          } else {
+            if (audioCtx.state === 'suspended') {
+              await audioCtx.resume();
+              setUIState('streaming');
+            } else {
+              stopWebSocketAudio();
+            }
+          }
+        } catch (e) {
+          console.error('AudioContext initiation failed:', e);
+        }
+      });
+
+      // Volume Slider (0 - 150%)
+      volumeSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        volumeDisplay.textContent = val + '%';
+        currentGain = val / 100.0;
+        if (gainNode && !isMuted) {
+          gainNode.gain.setValueAtTime(currentGain, audioCtx.currentTime);
+        }
+        if (val === 0) {
+          muteBtn.textContent = '🔇';
+        } else {
+          muteBtn.textContent = isMuted ? '🔇' : '🔊';
+        }
+      });
+
+      resetVolBtn.addEventListener('click', () => {
+        volumeSlider.value = 100;
+        volumeSlider.dispatchEvent(new Event('input'));
+      });
+
+      muteBtn.addEventListener('click', () => {
+        if (!isMuted) {
+          isMuted = true;
+          muteBtn.textContent = '🔇';
+          if (gainNode) gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        } else {
+          isMuted = false;
+          muteBtn.textContent = '🔊';
+          if (gainNode) gainNode.gain.setValueAtTime(currentGain, audioCtx.currentTime);
+        }
+      });
+
+      reconnectBtn.addEventListener('click', async () => {
+        await getAudioContext();
+        stopWebSocketAudio();
+        isStreaming = true;
+        connectWebSocket();
+      });
+
+      // Auth Modal Handlers
+      function showAuthModal() {
+        authModal.style.display = 'flex';
+        tokenInput.focus();
+      }
+
+      submitAuthBtn.addEventListener('click', () => {
+        const val = tokenInput.value.trim();
+        if (val) {
+          authToken = val;
+          localStorage.setItem('mac_stream_token', val);
+          authModal.style.display = 'none';
+          updateFallbackSrc();
+          if (isStreaming) connectWebSocket();
+        }
+      });
+
+      // If token in URL query parameter, store it
+      if (urlParams.get('token')) {
+        authToken = urlParams.get('token');
+        localStorage.setItem('mac_stream_token', authToken);
+      }
+
+      clearCanvas();
+    })();
+  </script>
+</body>
+</html>
